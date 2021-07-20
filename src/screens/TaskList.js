@@ -1,43 +1,54 @@
 import React, {Component} from 'react';
 import { Alert,  View, Text, ImageBackground, StyleSheet, FlatList, TouchableOpacity, Platform } from 'react-native';
 
-import commonStyles from '../commonStyles'
-import todayImage from '../../assets/imgs/today.jpg'
-
 import Icon from 'react-native-vector-icons/FontAwesome'
+import AsyncStorage from '@react-native-community/async-storage'
 
 import moment from 'moment'
 import 'moment/locale/pt-br'
 
+
+import commonStyles from '../commonStyles'
+import todayImage from '../../assets/imgs/today.jpg'
 import Task from '../components/Task'
 import AddTask from './AddTask';
+import api from '../services/api'
+import { showError } from '../utils';
+
+const initialState = {
+    showDoneTasks: true,
+    showAddTask: false,
+    visibleTasks: [],
+    tasks: []
+}
 
 export default class TaskList extends Component {
 
-    state = {
-        showDoneTasks: true,
-        showAddTask: false,
-        visibleTasks: [],
-        tasks: [{
-            id: Math.random(),
-            desc: 'Comprar Livro de React Native',
-            estimateAt: new Date(),
-            doneAt: new Date(),
-        }, {
-            id: Math.random(),
-            desc: 'Ler Livro de React Native',
-            estimateAt: new Date(),
-            doneAt: null,
-        },]
-    }
+    state = {...initialState}
 
 
-    componentDidMount = () => {
-        this.filterTasks()
+    componentDidMount = async () => {
+        const stateString = await AsyncStorage.getItem('tasksState')
+        const state = JSON.parse(stateString) || initialState
+        this.setState({
+            showDoneTasks: state.showDoneTasks
+        }, this.filterTasks)
+
+        this.loadTasks()
     }
 
     toggleFilter = () => {
-        this.setState({ showDoneTasks: !this.state.showDoneTasks }, this.filterTasks)
+        this.setState({ showDoneTasks: !this.state.showDoneTasks }, this.loadTasks)
+    }
+
+    loadTasks = async() => {
+        try {
+            const maxDate = moment().format('YYYY-MM-DD 23:59:59')
+            const response = await api.get(`tasks?date=${maxDate}`)
+            this.setState({tasks: response.data}, this.filterTasks)
+        }catch(err){
+            showError(err)
+        }
     }
 
     filterTasks = () => {
@@ -50,33 +61,44 @@ export default class TaskList extends Component {
         }
 
         this.setState({visibleTasks})
+        AsyncStorage.setItem('tasksState', JSON.stringify({
+            showDoneTasks: this.state.showDoneTasks
+        }))
     }
 
-    toggleTask = taskId => {
-        const tasks = [...this.state.tasks]
-        tasks.forEach(task => {
-            if(task.id == taskId){
-                task.doneAt = task.doneAt ? null : new Date()
-            }
-        })
-        this.setState({tasks}, this.filterTasks)
+    toggleTask = async taskId => {
+        try{
+            await api.put(`tasks/${taskId}/toggle`)
+            this.loadTasks()
+        }catch(err){
+            showError(err)
+        }
     }
 
-    addTask = newTask => {
+    addTask = async newTask => {
         if(!newTask.desc || !newTask.desc.trim()){
             Alert.alert('Dados inválidos', 'Descrição não informada!')
             return
         }
-        const tasks = [...this.state.tasks]
-        tasks.push({
-            id: Math.random(),
-            desc: newTask.desc,
-            estimateAt: newTask.date,
-            doneAt: null
-        })
+        
+        try{
+            await api.post('tasks', {
+                desc: newTask.desc,
+                estimateAt: newTask.date
+            })
+            this.setState({showAddTask: false}, this.loadTasks)
+        }catch(err){
+            showError(err)
+        }
+    }
 
-        this.setState({tasks, showAddTask: false}, this.filterTasks)
-
+    deleteTask = async id => {
+        try{
+            await api.delete(`/tasks/${id}`)
+            this.loadTasks()
+        }catch(err){
+            showError(err)
+        }
     }
 
     render(){
@@ -102,7 +124,7 @@ export default class TaskList extends Component {
                 <View style={styles.taskList}>
                     <FlatList data={this.state.visibleTasks} 
                         keyExtractor={item => `${item.id}`}
-                        renderItem={({item}) => <Task {...item} toggleTask={this.toggleTask} /> }/>
+                        renderItem={({item}) => <Task {...item} toggleTask={this.toggleTask} onDelete={this.deleteTask} /> }/>
                 </View>
                 <TouchableOpacity style={styles.addButton} 
                     activeOpacity={0.7}
