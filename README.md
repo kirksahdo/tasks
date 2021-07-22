@@ -1,2 +1,2 @@
 # tasks
-A simples Task App
+A simple Task App
