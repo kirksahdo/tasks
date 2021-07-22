@@ -5,13 +5,14 @@ import backgroundImage from '../../assets/imgs/login.jpg'
 import commonStyles from '../commonStyles'
 import { showError, showSuccess } from '../utils'
 import api from '../services/api'
+import AsyncStorage from '@react-native-community/async-storage'
 import AuthInput from '../components/AuthInput'
-import { ThemeColors } from 'react-navigation'
+
 
 const initialState = {
     name: '',
-    email: 'kirk@gmail.com',
-    password: 'teste123',
+    email: '',
+    password: '',
     confirmPassword: '',
     stageNew: false
 }
@@ -52,8 +53,9 @@ export default class Auth extends Component{
                 email: this.state.email,
                 password: this.state.password
             })
-            api.defaults.headers.common['Authorization'] = `bearer ${response.data.token}`;
-            this.props.navigation.navigate('Home')
+            AsyncStorage.setItem('userData', JSON.stringify(response.data))
+            api.defaults.headers.common['Authorization'] = `bearer ${response.data.token}`
+            this.props.navigation.navigate('Home', response.data)
             this.props.navigation.goBack(null)
         }
         catch(err){
